@@ -3,7 +3,9 @@
 A privacy-preserving Midnight DApp that lets a user commit a private balance on-chain using a zero-knowledge proof. The raw balance is supplied as private witness data and is never written to the public contract ledger — the public state contains only a cryptographic commitment and the total commitment count.
 
 **Live demo:** <https://midnight-private-balance-dapp.vercel.app/>
+
 **Demo video:** <https://www.loom.com/share/d0e6556d7234425ab6b323692d36c14b>
+
 **Repository:** <https://github.com/shellyjellyyy/midnight-private-balance-dapp>
 
 ---
