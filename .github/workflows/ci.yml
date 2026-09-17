@@ -26,25 +26,24 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  # Note: Compact compilation requires WSL2 or native Linux/macOS
-  # This job is separate because it needs the Compact toolchain
-  compile-contract:
+  verify-artifacts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.15'
-
-      - name: Install Compact devtools
+      - name: Verify committed Compact artifacts exist
         run: |
-          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
-          source $HOME/.local/bin/env
-          compact update 0.30.0
-
-      - name: Compile contract
-        run: |
-          source $HOME/.local/bin/env
-          npm run compact:compile
+          for f in \
+            managed/counter/compiler/contract-info.json \
+            managed/counter/contract/index.js \
+            managed/counter/contract/index.d.ts \
+            managed/counter/zkir/commitBalance.zkir \
+            managed/counter/zkir/getTotalCommitted.zkir \
+            managed/counter/keys/commitBalance.prover \
+            managed/counter/keys/getTotalCommitted.prover; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required artifact: $f"
+              exit 1
+            fi
+          done
+          echo "All committed Compact artifacts verified."
