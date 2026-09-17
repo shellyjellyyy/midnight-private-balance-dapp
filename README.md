@@ -155,9 +155,25 @@ The tests prove, without any network, that the contract stores only commitment h
 
 | Network | Address |
 |----------|----------------------------------|
-| Preprod | [PASTE ADDRESS AFTER DEPLOY] |
+| Midnight Preprod | 7e946de8c1b44ff30a74d5d86d68db1203b53d4cc5a5132f6a78dc116f7e027a |
 
-*(Mandatory for submission — do not leave blank.)*
+This is the **Midnight Preprod contract address** of the deployed privacy counter contract.
+
+The address is **public on-chain data**: anyone can look it up on a Midnight indexer. It identifies *where* the contract lives on the Midnight Preprod network so the dApp (and other users) can join it and read its public state. The address does **not** reveal any user's private balance — the ledger stores only 32-byte `persistentCommit(balance, nonce)` hashes, and the raw balance never appears on-chain. Sharing this address is safe; it is exactly what other users need to join the same deployed contract.
+
+## Demo Flow
+
+A hackathon reviewer can verify the privacy behavior end-to-end in a couple of minutes:
+
+1. **Connect 1AM** — click **Connect 1AM** and approve the connection in the wallet.
+2. **Use Midnight Preprod** — ensure the 1AM wallet's network setting is **Preprod**, the network the contract is deployed on.
+3. **Join the deployed contract** — paste the Midnight Preprod contract address above, or click **Deploy New Contract** to deploy a fresh one, then click **Join**.
+4. **Enter a private balance** — move the slider to a secret balance between 1 and 100. This value is a private *witness* and never leaves the browser.
+5. **Call `commitBalance`** — click **Commit Private Balance**. 1AM generates a ZK proof in-browser and submits the transaction.
+6. **Observe the commitment count increase** — the **Total Commitments** counter increments, confirming the proof was accepted and the transaction landed on-chain.
+7. **Observe the raw balance stays private** — the public ledger (readable via the indexer) contains a 32-byte commitment hash and the counter — **not** your balance value. An observer can see *that* a commitment was made but not *what* value was committed.
+
+The same flow is also proven offline by `tests/privacy.test.ts`, which executes the real `commitBalance` circuit and asserts the ledger stores only the 32-byte commitment hash.
 
 ## Live Demo
 
