@@ -15,6 +15,18 @@ import { useMidnightState } from '../hooks/MidnightProvider';
 // ============================================================
 
 type CallStatus = 'idle' | 'deploying' | 'proving' | 'success' | 'error';
+type CopyStatus = 'idle' | 'copied' | 'failed';
+
+// ============================================================
+// Verified deployment
+// ============================================================
+// Publicly deployed privacy counter contract on Midnight Preprod.
+// The address is pre-filled into the "join existing contract" input
+// as a convenience — joining still requires an explicit click of the
+// Join button. Nothing is deployed, connected, or submitted
+// automatically because of this value.
+const VERIFIED_PREPROD_CONTRACT_ADDRESS =
+  '7e946de8c1b44ff30a74d5d86d68db1203b53d4cc5a5132f6a78dc116f7e027a';
 
 // ============================================================
 // Component
@@ -37,7 +49,10 @@ export default function CircuitCall() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [balance, setBalance] = useState<number>(50);
   const [totalCommitted, setTotalCommitted] = useState<bigint | null>(null);
-  const [joinAddress, setJoinAddress] = useState<string>('');
+  const [joinAddress, setJoinAddress] = useState<string>(
+    VERIFIED_PREPROD_CONTRACT_ADDRESS
+  );
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
 
   // ============================================================
   // Deploy Contract
@@ -128,6 +143,46 @@ export default function CircuitCall() {
     setTxResult(null);
     setErrorMsg(null);
   }, []);
+
+  // ============================================================
+  // Copy Deployed Contract Address
+  // ============================================================
+
+  // Copies the public contract address to the clipboard and shows a brief
+  // "Copied" / "Copy failed" state. Uses the async Clipboard API when
+  // available, with a small legacy fallback, and gracefully swallows
+  // failures (e.g. non-secure contexts without the API).
+  const handleCopy = useCallback(async () => {
+    if (!contractAddress) return;
+
+    let ok = false;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(contractAddress);
+        ok = true;
+      }
+    } catch {
+      // Fall through to the fallback below.
+    }
+
+    if (!ok) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = contractAddress;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {
+        ok = false;
+      }
+    }
+
+    setCopyStatus(ok ? 'copied' : 'failed');
+    window.setTimeout(() => setCopyStatus('idle'), 1500);
+  }, [contractAddress]);
 
   // On reconnect with a saved contract address, restore the session by joining
   // the persisted address. joinCounter only reads from the indexer — it does
@@ -253,6 +308,17 @@ export default function CircuitCall() {
       <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--muted)' }}>
         <span>Contract: </span>
         <span className="address">{contractAddress}</span>
+        <button
+          className="secondary"
+          onClick={handleCopy}
+          style={{ marginLeft: 8, fontSize: '0.75rem', padding: '2px 8px' }}
+        >
+          {copyStatus === 'copied'
+            ? 'Copied'
+            : copyStatus === 'failed'
+              ? 'Copy failed'
+              : 'Copy'}
+        </button>
         <button
           className="secondary"
           onClick={() => {
