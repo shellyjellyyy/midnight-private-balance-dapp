@@ -13,6 +13,8 @@ An on-chain observer can see **THAT** a commitment was made, but not **WHAT** va
 
 ## Privacy Model
 
+> For the full threat model, see [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ### Public on-chain state (readable via the indexer)
 
 - `balanceCommitments: Set<Bytes<32>>` — commitment hashes only. Each hash is produced by `persistentCommit(balance, nonce)`; the random 32-byte nonce makes any given hash impractical to reverse, so the balance is hidden.
