@@ -32,18 +32,4 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Verify committed Compact artifacts exist
-        run: |
-          for f in \
-            managed/counter/compiler/contract-info.json \
-            managed/counter/contract/index.js \
-            managed/counter/contract/index.d.ts \
-            managed/counter/zkir/commitBalance.zkir \
-            managed/counter/zkir/getTotalCommitted.zkir \
-            managed/counter/keys/commitBalance.prover \
-            managed/counter/keys/getTotalCommitted.prover; do
-            if [ ! -f "$f" ]; then
-              echo "::error::Missing required artifact: $f"
-              exit 1
-            fi
-          done
-          echo "All committed Compact artifacts verified."
+        run: npm run verify:artifacts

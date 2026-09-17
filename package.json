@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "compact:compile": "compact compile contracts/counter.compact managed/counter && node scripts/post-compile.mjs",
+    "verify:artifacts": "node scripts/verify-artifacts.mjs",
     "deploy:preprod": "echo 'Deployment requires manual setup with wallet credentials. See README for instructions.'"
   },
   "dependencies": {
