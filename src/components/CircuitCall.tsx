@@ -396,8 +396,8 @@ export default function CircuitCall() {
             </ul>
             <strong style={{ color: 'var(--accent-2)' }}>What's private:</strong>
             <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-              <li>Your actual balance value ({balance})</li>
-              <li>Your secret nonce</li>
+              <li>The committed value — it remains private and is never written to the public ledger</li>
+              <li>The secret nonce</li>
               <li>The ZK proof details</li>
             </ul>
           </div>
