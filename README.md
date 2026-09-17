@@ -1,60 +1,61 @@
-# Midnight Privacy Counter dApp
+# Midnight Privacy Counter
 
-> A privacy-preserving balance commitment system on the Midnight network. Users commit to a private balance (1–100) using a ZK proof; the actual value is never revealed on-chain.
+A privacy-preserving Midnight DApp that lets a user commit a private balance on-chain using a zero-knowledge proof. The raw balance is supplied as private witness data and is never written to the public contract ledger — the public state contains only a cryptographic commitment and the total commitment count.
 
-## What This Does
+**Live demo:** <https://midnight-private-balance-dapp.vercel.app/>
+**Demo video:** <https://www.loom.com/share/d0e6556d7234425ab6b323692d36c14b>
+**Repository:** <https://github.com/shellyjellyyy/midnight-private-balance-dapp>
 
-1. A user connects with the **1AM wallet** on the **Preprod** network.
-2. They pick a private balance (1–100) — this is a **witness** input that never leaves their browser.
-3. The contract's `commitBalance` circuit proves the balance is valid, creates a commitment via `persistentCommit(balance, nonce)`, and stores **only the 32-byte commitment hash** in the on-chain ledger (a `Set<Bytes<32>>`).
-4. A public counter tracks how many commitments exist.
+---
 
-An on-chain observer can see **THAT** a commitment was made, but not **WHAT** value was committed.
+## What This DApp Does
+
+1. A user connects with the **1AM wallet** on the **Midnight Preprod** network.
+2. They pick a private balance (1–100). This is a **witness** input handled entirely in the browser.
+3. The contract's `commitBalance` circuit asserts the balance is in range, computes `persistentCommit(balance, nonce)`, and stores **only the 32-byte commitment hash** in the public ledger (`Set<Bytes<32>>`).
+4. A public counter (`totalCommitted`) tracks how many commitments exist.
+5. The confirmed on-chain state (commitment set size and counter) is read back and shown in the UI.
+
+An on-chain observer can see **that** a commitment was made — but not **what** value was committed.
+
+## Why Privacy Matters
+
+Public blockchains make every value visible by default. For anything balance-like — holdings, salary, eligibility thresholds — that visibility is a feature and a liability at once. This DApp demonstrates the alternative Midnight enables: prove a fact about a private value and publish only a commitment, so the network can verify the action without learning the number behind it.
+
+## How It Works
+
+- The frontend collects a private balance (1–100) and a fresh, cryptographically random 32-byte nonce, both supplied to the circuit via **witnesses** that never leave the browser.
+- `commitBalance` runs inside the ZK proof: it asserts `0 < balance <= 100` and computes the commitment `persistentCommit<Uint<16>>(balance, nonce)` from the private witness data.
+- Only the commitment hash is inserted into the public ledger; the raw balance and nonce are never written on-chain.
+- The transaction is balanced and submitted through the 1AM wallet; proving happens in-browser via the wallet's proving service (with fallback to the wallet-configured proof server).
+- After confirmation, the app decodes the resulting public contract state (`nextContractState`) and displays the total commitment count.
 
 ## Privacy Model
 
-> For the full threat model, see [docs/PRIVACY.md](docs/PRIVACY.md).
+> Full threat model: [docs/PRIVACY.md](docs/PRIVACY.md)
 
-### Public on-chain state (readable via the indexer)
+### Public
 
-- `balanceCommitments: Set<Bytes<32>>` — commitment hashes only. Each hash is produced by `persistentCommit(balance, nonce)`; the random 32-byte nonce makes any given hash impractical to reverse, so the balance is hidden.
-- `totalCommitted: Counter` — number of commitments made.
-- Transaction metadata.
+- **Contract address** (Midnight Preprod).
+- **Commitment hashes** — `balanceCommitments: Set<Bytes<32>>`, produced by `persistentCommit(balance, nonce)`.
+- **Total commitment count** — `totalCommitted: Counter`.
+- **Public transaction/state metadata** — that a commit transaction occurred, and when.
 
-### Private (never leaves the user's device)
+### Private
 
-- `secretBalance` — the user's balance (1–100). Supplied via witness, never written to the ledger.
-- `secretNonce` — a fresh cryptographically random 32-byte nonce per commitment. Supplies the hiding property.
-- ZK proof details.
+- **Raw balance value** (`secretBalance`, 1–100) — witness input, never written to the ledger.
+- **Secret nonce** (`secretNonce`, fresh 32 bytes per commitment) — witness input.
+- **Witness data** used to construct the commitment.
 
-### What committing proves without revealing
+### What the proof establishes (and what it does not)
 
-The `commitBalance` circuit asserts `0 < balance <= 100` inside the proof. The verifier learns the balance is in range and sees the commitment hash — nothing else.
+The circuit proves the commitment was constructed from a valid private balance — the verifier learns the balance is in range and sees the commitment hash, nothing else. The random nonce makes recovering the balance from the commitment **computationally infeasible** under the intended cryptographic assumptions; different nonces yield different commitments, so repeated commitments are unlinkable.
 
-## Repository Layout
+This is **not** full transaction anonymity. Observers can still see public blockchain metadata: the contract address, commitment hashes, contract state changes, and the fact and timing of transactions. The claim is specific — the raw balance is not a public ledger value — not that all metadata is hidden.
 
-```
-contracts/counter.compact     Compact contract source (privacy model + circuits)
-managed/counter/              Compiled contract output checked into the repo:
-  ├─ contract/                  generated TS bindings (contract, ledger, circuits)
-  ├─ keys/                      proving/verifying keys (commitBalance, getTotalCommitted)
-  └─ zkir/                      ZK circuit intermediates
-keys/ , zkir/                 Copies of the ZK artifacts served by the dev server / build
-src/
-  ├─ contracts/
-  │  ├─ compiled.ts             compact-js CompiledContract binding
-  │  ├─ witnesses.ts            TS implementations of secretBalance / secretNonce
-  │  ├─ providers.ts            wallet discovery, v4 connect(), providers factory
-  │  └─ counter-api.ts          deployContract / findDeployedContract wrapper + API
-  ├─ hooks/
-  │  ├─ useMidnight.ts          wallet state + connect/disconnect (1AM, with wallet diagnostics)
-  │  └─ MidnightProvider.tsx    shared context: one wallet state for all components
-  └─ components/                WalletConnect, CircuitCall (React UI)
-tests/                         Vitest suites (see Testing below)
-scripts/                       cross-platform build helpers (Windows/Linux/macOS)
-```
+## Contract Details
 
-### Contract summary (`contracts/counter.compact`)
+Source: [`contracts/counter.compact`](contracts/counter.compact)
 
 ```compact
 export ledger balanceCommitments: Set<Bytes<32>>;   // commitment hashes only
@@ -74,65 +75,90 @@ export circuit commitBalance(): [] {
 export circuit getTotalCommitted(): Uint<64> { return totalCommitted; }
 ```
 
-Key properties:
+- **`balanceCommitments: Set<Bytes<32>>`** — public set of commitment hashes; the only place commitment data lives on-chain.
+- **`totalCommitted: Counter`** — public count of `commitBalance` calls.
+- **`secretBalance` / `secretNonce`** — private witnesses supplying the balance and nonce.
+- **`commitBalance()`** — the circuit that validates the range and constructs the commitment from witness data.
+- **`getTotalCommitted()`** — read-only query of the public counter.
+- Commitment construction uses `persistentCommit`, so an already-published commitment is binding and the nonce provides the hiding property.
 
-- `persistentCommit` uses the supplied random nonce, so the commitment is **binding** (cannot change an already-published commitment) and **hiding** (the balance cannot be recovered from the hash).
-- No `disclose()` is ever called on the balance — only the commitment hash is stored.
-- Running the same balance with a different nonce produces a different commitment, so multiple commitments are unlinkable.
+## Deployed Contract
+
+| Network | Address |
+|----------|----------------------------------|
+| Midnight Preprod | `7e946de8c1b44ff30a74d5d86d68db1203b53d4cc5a5132f6a78dc116f7e027a` |
+
+This is the deployed contract the live demo joins. The address is public on-chain data anyone can look up on a Midnight indexer; it reveals no user's private balance, since the ledger stores only commitment hashes. The frontend pre-fills this address for joining and persists it in `localStorage` (key `midnight.privacyCounter.contractAddress`) so users reconnect to the same contract across refreshes. Nothing sensitive — balances, nonces, credentials — is stored client-side.
+
+A successful real `commitBalance` transaction has been performed against this contract on Preprod; the total commitment count reached **1** after that commitment was confirmed.
+
+## Demo Flow
+
+1. **Connect 1AM** — click **Connect 1AM** and approve the connection in the wallet.
+2. **Connect to Midnight Preprod** — the app connects via the DApp Connector v4 API; the 1AM wallet's network setting must be **Preprod**.
+3. **Use/join the deployed contract** — the verified Preprod address is pre-filled; click **Join** (or **Deploy New Contract** to deploy a fresh one).
+4. **Choose a private balance** — move the slider to a secret balance (1–100). This value is a witness and never leaves the browser.
+5. **Call `commitBalance`** — click **Commit Private Balance** to invoke the circuit from the frontend.
+6. **Generate the ZK proof** — 1AM generates the proof in-browser and balances the transaction.
+7. **Submit the transaction** — the transaction is submitted to Midnight Preprod and the app waits for on-chain confirmation.
+8. **Observe the public result** — the **Total Commitments** counter reflects the confirmed state.
+9. **Confirm privacy** — the public ledger contains a 32-byte commitment hash and the counter — **not** your balance value. An observer sees *that* a commitment was made, not *what* value was committed.
 
 ## Tech Stack
 
-- **Midnight** — `compact-runtime@0.16.0`, compiled with toolchain `compact 0.31.1` (artifacts checked into `managed/`)
+- **Compact** — `compact-runtime@0.16.0`, compiled with the Compact toolchain (artifacts checked in under `managed/`)
 - **Midnight.js SDK** — `midnight-js-*@4.0.4`
 - **DApp Connector API** — `@midnight-ntwrk/dapp-connector-api@4.0.1` (v4 `connect(networkId)` API)
-- **React + Vite** — frontend (React 18, Vite 5)
-- **Vitest** — tests
-- **1AM wallet** — Midnight browser extension (injects the DApp Connector v4 API at `window.midnight['1am']`, reports `apiVersion 4.0.0`, and handles proving and DUST sponsorship in-browser; the app targets **Preprod**)
+- **React 18 + Vite 5** — frontend
+- **Vitest** — test runner
+- **1AM wallet** — Midnight browser extension; handles connection, in-browser proving, balancing, and transaction submission; app targets **Preprod**
+
+## Repository Structure
+
+```
+contracts/counter.compact     Compact contract source (privacy model + circuits)
+managed/counter/              Compiled contract output checked into the repo:
+  ├─ contract/                  generated TS bindings (contract, ledger, circuits)
+  ├─ keys/                      proving/verifying keys (commitBalance, getTotalCommitted)
+  └─ zkir/                      ZK circuit intermediates
+keys/ , zkir/                 Copies of the ZK artifacts served by the dev server / build
+src/
+  ├─ contracts/
+  │  ├─ compiled.ts             compact-js CompiledContract binding
+  │  ├─ witnesses.ts            TS implementations of secretBalance / secretNonce
+  │  ├─ providers.ts            wallet discovery, v4 connect(), providers factory
+  │  └─ counter-api.ts          deployContract / findDeployedContract wrapper + API
+  ├─ hooks/
+  │  ├─ useMidnight.ts          wallet state + connect/disconnect
+  │  └─ MidnightProvider.tsx    shared context: one wallet state for all components
+  └─ components/                WalletConnect, CircuitCall (React UI)
+tests/                         Vitest suites (see Testing below)
+docs/PRIVACY.md                privacy threat model
+scripts/                       cross-platform build helpers (Windows/Linux/macOS)
+.github/workflows/ci.yml       CI: tests, build, artifact verification
+```
 
 ## Prerequisites
 
 - Node.js 22.x
-- [1AM wallet](https://1am.xyz/) browser extension (Chrome/Firefox), installed and pointed at **Preprod**
-- Docker (only if you use a local proof server)
+- [1AM wallet](https://1am.xyz/) browser extension, installed and set to **Preprod**
+- Docker (only if you run a local proof server; 1AM's in-browser proving means this is normally not needed)
 
 ## Local Setup
-
-### 1. Install
 
 ```bash
 npm install
 ```
 
-### 2. Compiling the contract (optional)
+Compiling the contract is optional: the compiled artifacts are checked in under `managed/`, so the app builds and runs without recompiling. To regenerate them, run `npm run compact:compile` (requires the Compact toolchain; on Windows this runs inside WSL2). Note that recompilation changes the on-chain contract address, so a freshly compiled contract requires a fresh deployment.
 
-The compiled contract and ZK artifacts are already checked in under `managed/`, so the app builds and runs without recompiling. To regenerate them you need the Compact toolchain:
-
-```bash
-npm run compact:compile
-```
-
-The generated key/zkir files are copied into the project-root `keys/` and `zkir/` directories by `scripts/post-compile.mjs` (cross-platform). On Windows the Compact compiler runs inside WSL2 — see Midnight's docs for the WSL2 setup. Recompilation changes the on-chain contract address, so a freshly compiled contract requires a fresh deployment.
-
-### 3. Build (any OS)
-
-```bash
-npm run build
-```
-
-`tsc -b` type-checks, `vite build` bundles, and `scripts/copy-artifacts.mjs` copies `keys/` and `zkir/` into `dist/` so the deployed bundle can fetch its ZK artifacts. No shell `cp`/`mkdir -p` required — works on Windows `cmd.exe`, PowerShell, and Linux/macOS.
-
-### 4. Run the app
+## Running the App
 
 ```bash
 npm run dev
 ```
 
-Then, in the browser:
-
-1. Install the 1AM wallet extension and set its network to **Preprod** in the wallet settings. 1AM handles ZK proving in-browser and sponsors DUST fees, so no local proof server is required.
-2. Load the dApp, click **Connect 1AM**, and approve the connection in the wallet.
-3. Move the slider to a private balance (1–100) and deploy/join the contract.
-4. Click **Commit Private Balance** — a ZK proof is generated, and only the commitment hash is submitted.
+Then: install/enable the 1AM extension on **Preprod**, load the app, click **Connect 1AM**, join the deployed contract, pick a private balance, and click **Commit Private Balance**. See **Demo Flow** above for the full walkthrough.
 
 ## Testing
 
@@ -140,77 +166,52 @@ Then, in the browser:
 npm test
 ```
 
-18 tests across two suites:
+**Verified result: 42/42 tests passing** across four suites:
 
-- `tests/counter.test.ts` (10) — the generated contract bindings: exports, contract construction, witness behavior, and circuit structure.
-- `tests/privacy.test.ts` (8) — privacy-model checks that **execute the real `commitBalance` circuit offline** via the compact-runtime VM (no wallet, no proof server): initial public ledger, witnesses never touching public state, fresh nonces, the 1–100 range check, the 32-byte/hidden commitment, and unlinkability across nonces.
+- `tests/counter.test.ts` — the generated contract bindings: exports, contract construction, witness behavior, and circuit structure.
+- `tests/privacy.test.ts` — privacy-model checks that **execute the real `commitBalance` circuit offline** via the compact-runtime VM (no wallet, no proof server): initial public ledger, witnesses never touching public state, fresh nonces, the 1–100 range check, the 32-byte hidden commitment, and unlinkability across nonces.
+- `tests/storage.test.ts` — contract-address persistence in `localStorage`: only the public address is stored, operations are best-effort and never throw.
+- `tests/witnesses.test.ts` — witness implementations: range enforcement, correct types, and cryptographically random nonces.
 
-The tests prove, without any network, that the contract stores only commitment hashes and enforces the range check inside the circuit.
+The offline privacy tests prove, without any network, that the contract stores only commitment hashes and enforces the range check inside the circuit.
 
-## Known Limitations
-
-- **Windows contract recompilation** requires WSL2 (managed artifacts are checked in so this is not needed for day-to-day builds).
-- **Wallet connectivity** depends on the 1AM extension implementing the DApp Connector v4 protocol on Preprod. The app targets 1AM exclusively (`window.midnight['1am']`); if `connect('preprod')` rejects, confirm the 1AM extension is installed, is on the latest build, and its network setting is Preprod. The UI logs `[wallet-connect]` diagnostics to the browser console to pin down the failing step. Browser verification of the 1AM connection flow is still pending.
-- **Proof generation** uses 1AM's in-browser proving (`getProvingProvider`); if the wallet exposes no proving service, it falls back to the `proverServerUri` from the wallet configuration.
-
-## Contract Address
-
-| Network | Address |
-|----------|----------------------------------|
-| Midnight Preprod | 7e946de8c1b44ff30a74d5d86d68db1203b53d4cc5a5132f6a78dc116f7e027a |
-
-This is the **Midnight Preprod contract address** of the deployed privacy counter contract.
-
-The address is **public on-chain data**: anyone can look it up on a Midnight indexer. It identifies *where* the contract lives on the Midnight Preprod network so the dApp (and other users) can join it and read its public state. The address does **not** reveal any user's private balance — the ledger stores only 32-byte `persistentCommit(balance, nonce)` hashes, and the raw balance never appears on-chain. Sharing this address is safe; it is exactly what other users need to join the same deployed contract.
-
-## Demo Flow
-
-A hackathon reviewer can verify the privacy behavior end-to-end in a couple of minutes:
-
-1. **Connect 1AM** — click **Connect 1AM** and approve the connection in the wallet.
-2. **Use Midnight Preprod** — ensure the 1AM wallet's network setting is **Preprod**, the network the contract is deployed on.
-3. **Join the deployed contract** — paste the Midnight Preprod contract address above, or click **Deploy New Contract** to deploy a fresh one, then click **Join**.
-4. **Enter a private balance** — move the slider to a secret balance between 1 and 100. This value is a private *witness* and never leaves the browser.
-5. **Call `commitBalance`** — click **Commit Private Balance**. 1AM generates a ZK proof in-browser and submits the transaction.
-6. **Observe the commitment count increase** — the **Total Commitments** counter increments, confirming the proof was accepted and the transaction landed on-chain.
-7. **Observe the raw balance stays private** — the public ledger (readable via the indexer) contains a 32-byte commitment hash and the counter — **not** your balance value. An observer can see *that* a commitment was made but not *what* value was committed.
-
-The same flow is also proven offline by `tests/privacy.test.ts`, which executes the real `commitBalance` circuit and asserts the ledger stores only the 32-byte commitment hash.
-
-## Live Demo
-
-[PASTE LIVE URL AFTER DEPLOYING FRONTEND]
-
-## Demo Video
-
-[TO BE ADDED AFTER RECORDING]
-
-## Screenshots
-
-[TO BE ADDED AFTER DEPLOYMENT]
-
-## Deployment
-
-### Frontend (Vercel/Netlify)
+## Build / Artifact Verification
 
 ```bash
 npm run build
-# then deploy dist/ with your provider
-npx vercel --prod        # or
-npx netlify deploy --prod
 ```
 
-Make sure the committed `dist/` includes `dist/keys/` and `dist/zkir/` (added by `scripts/copy-artifacts.mjs`).
-
-### Contract deployment
-
-Requires a funded Preprod wallet (tNIGHT/tDUST) and a proof server:
+`tsc -b` type-checks, `vite build` bundles, and `scripts/copy-artifacts.mjs` copies `keys/` and `zkir/` into `dist/` so the deployed bundle can fetch its ZK artifacts. Works on Windows `cmd.exe`, PowerShell, and Linux/macOS.
 
 ```bash
-npm run deploy:preprod
+npm run verify:artifacts
 ```
 
-Fill in the deployed contract address in the table above. See [Midnight Documentation](https://docs.midnight.network/) for environment endpoints (indexer, proof server) and deployment steps.
+Checks that the committed Compact artifacts are present and consistent. **Verified result: passes.**
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs tests, build, and artifact verification on push and pull requests to `main` and is **green**.
+
+## Privacy Limitations / Threat Model
+
+- **Not transaction anonymity.** Observers see the contract address, commitment hashes (and their additions), state changes to `totalCommitted`, and public transaction metadata including timing. Only the balance *value* is protected from being a public ledger value.
+- **Computationally, not absolutely, hidden.** Hiding relies on the nonce-based `persistentCommit` construction under its intended cryptographic assumptions; the balance is computationally infeasible to recover from the commitment, not mathematically impossible.
+- **Infrastructure trust.** Wallet connection, in-browser proving, balancing, and submission rely on the 1AM wallet and Midnight Preprod infrastructure.
+- **Hackathon scope.** This is a Preprod hackathon application, not an audited production system. See [docs/PRIVACY.md](docs/PRIVACY.md) for the full threat model.
+
+## Deployment
+
+- **Frontend:** deployed on **Vercel** at <https://midnight-private-balance-dapp.vercel.app/> (build command `npm run build`, output `dist/`, including the copied `dist/keys/` and `dist/zkir/` artifacts).
+- **Contract:** deployed on **Midnight Preprod** at `7e946de8c1b44ff30a74d5d86d68db1203b53d4cc5a5132f6a78dc116f7e027a`.
+
+## Hackathon-Relevant Notes
+
+- Real Compact privacy-preserving contract with a real frontend circuit call.
+- Real 1AM wallet connection (DApp Connector v4) on Midnight Preprod.
+- Real ZK proving and real transaction submission — a confirmed `commitBalance` transaction exists on Preprod, with the total commitment count reaching 1.
+- Private balance and nonce handled strictly as witness/private data; only commitment hashes and the commitment count are public.
+- Contract address persists through `localStorage` for seamless reconnection.
+- 42/42 tests pass; `npm run build` and `npm run verify:artifacts` pass; CI is green.
+- Privacy threat model documented in [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## License
 
