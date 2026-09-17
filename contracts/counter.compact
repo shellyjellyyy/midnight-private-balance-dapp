@@ -1,0 +1,74 @@
+// ============================================================
+// privacy-counter.compact
+// ============================================================
+// PRIVACY MODEL
+//
+// PUBLIC (on-chain, visible to anyone via indexer):
+//   - `balanceCommitments` : Map storing commitment hashes.
+//                             Observers can see THAT someone committed,
+//                             but NOT the value — persistentCommit includes
+//                             a random nonce that provides hiding.
+//   - `totalCommitted`     : Counter tracking total number of commitments made.
+//
+// PRIVATE (witness, never leaves the user's device):
+//   - `secretBalance`      : The user's private balance value.
+//   - `secretNonce`        : Random nonce for commitment binding.
+//
+// WHAT IS PROVED WITHOUT BEING REVEALED:
+//   - The user proves they know a valid secretBalance (within the
+//     allowed range 1–100) that produces the commitment hash,
+//     without ever revealing the balance itself on-chain.
+//
+// PRIVACY GUARANTEE:
+//   - An observer can see that a commitment was made, but cannot
+//     determine the actual balance value from the on-chain data.
+//   - The commitment uses persistentCommit with a random nonce,
+//     making it computationally infeasible to reverse the hash.
+// ============================================================
+
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+// Public ledger state — anyone can read this via indexer.
+// The commitment map stores hashes, not the actual values.
+export ledger balanceCommitments: Set<Bytes<32>>;
+
+// Counter tracking total number of commitments made.
+export ledger totalCommitted: Counter;
+
+// Witnesses: private inputs supplied by the caller, never written to the ledger.
+// These provide the secret data for the commitment.
+witness secretBalance(): Uint<16>;
+witness secretNonce(): Bytes<32>;
+
+// Circuit: create a private balance commitment
+// The user proves they know a valid balance within range [1, 100]
+// without revealing the actual balance value.
+export circuit commitBalance(): [] {
+  // Get private inputs from witnesses
+  const balance = secretBalance();
+  const nonce = secretNonce();
+
+  // Validate the balance is within acceptable range
+  // This proves the user has a valid balance without revealing it
+  assert(balance > 0 && balance <= 100, "Balance must be between 1 and 100");
+
+  // Create a commitment: persistentCommit(balance, nonce)
+  // persistentCommit includes a random nonce, making it safe to store
+  // on-chain without disclose() (the nonce provides sufficient hiding)
+  const commitment = persistentCommit<Uint<16>>(balance, nonce);
+
+  // Store the commitment in the public set
+  // The commitment hash is safe to store because persistentCommit
+  // includes a random nonce that hides the input
+  balanceCommitments.insert(commitment);
+
+  // Increment the total committed counter
+  totalCommitted.increment(1);
+}
+
+// Circuit: get the total number of commitments (read-only helper)
+export circuit getTotalCommitted(): Uint<64> {
+  return totalCommitted;
+}
