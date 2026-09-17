@@ -179,11 +179,11 @@ The same flow is also proven offline by `tests/privacy.test.ts`, which executes 
 
 ## Live Demo
 
-[PASTE LIVE URL AFTER DEPLOYING FRONTEND]
+[LIVE DEMO](https://midnight-private-balance-dapp.vercel.app/)]
 
 ## Demo Video
 
-[TO BE ADDED AFTER RECORDING]
+[DEMO VIDEO](https://www.loom.com/share/d0e6556d7234425ab6b323692d36c14b)
 
 ## Screenshots
 
